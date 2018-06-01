@@ -8,9 +8,9 @@ credFile = str('/tmp/creds.json')
 
 API_KEY = "4d52b63c-f73a-4c27-8104-a3142512c517"
 LOGSET_ID = "c5838fd4-1d3d-4104-8293-87b72ddc5ef4"
-GET_LOGSET_URL = "https://rest.logentries.com/management/logsets/%s"
+GET_LOGSET_URL = "https://rest.logentries.com/management/logsets/{0}"
 LOG_URL = "https://rest.logentries.com/management/logs"
-LOG_NAME_PATTERN = "exchange:%s"
+LOG_NAME_PATTERN = "exchange:{0}"
 
 @app.route('/payload', methods=['GET', 'POST'])
 def webhookServer():
@@ -50,30 +50,40 @@ def handle_delete():
     return jsonify({'event':'push','status':'success', 'log_deleted' : deleted}), 200
 
 def get_log(branch_name):
-    headers = {'x-api-key': API_KEY}
+    headers = {
+        'x-api-key': API_KEY,
+        "Content-Type": "application/json"
+    }
     url = GET_LOGSET_URL.format(LOGSET_ID)
     resp = requests.get(url, headers=headers).json()
     for log in resp['logset']['logs_info']:
         if branch_name in log['name']:
-                print "Found log for branch %s: %s".format(branch_name, log)
+                print "Found log for branch {0}: {1}".format(branch_name, log)
                 return log
-    print "No log found for branch %s".format(branch_name)
+    print "No log found for branch {0}".format(branch_name)
     return None
 
 def create_log(name):
-    headers = {'x-api-key': API_KEY}
-    body = {"log":{"name": name,"source_type":"token", "logsets_info":[{"id": LOGSET_ID}]}}
-    r = requests.post(LOG_URL, data=json.dumps(body, separators=(',', ':')), headers=headers)
+    headers = {
+        'x-api-key': API_KEY,
+        "Content-Type": "application/json"
+    }
+    body = json.dumps({"log":{"name": name,"source_type":"token", "logsets_info":[{"id": LOGSET_ID}]}}, separators=(',', ':'))
+    print "Sending to Logentries: {0}".format(body)
+    r = requests.post(LOG_URL, data=body, headers=headers)
     print "Create log result:", r.status_code, r.content
 
 def delete_log(log_id):
-    headers = {'x-api-key': API_KEY}
+    headers = {
+        'x-api-key': API_KEY,
+        "Content-Type": "application/json"
+    }
     r = requests.delete(LOG_URL + "/" + log_id, headers=headers)
     print "Delete log result:", r.status_code, r.content
 
 def branch_name():
-    ref = request.json['ref']
-    print "Fetched branch name: %s".format(ref)
+    ref = request.json['ref'].replace("/refs/heads/", "")
+    print "Fetched branch name: " + ref
     return ref
 
 def debugPrintWebhookJSON(data):
@@ -84,4 +94,4 @@ def debugPrintWebhookJSON(data):
     print ' '
 
 if __name__ == '__main__':
-    app.run(host= '127.0.0.1', port=4040)  # Run on the machine's IP address and not just localhost
+    app.run(host= '127.0.0.1', port=4041)  # Run on the machine's IP address and not just localhost
