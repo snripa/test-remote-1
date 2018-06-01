@@ -5,106 +5,88 @@ from urlparse import urlparse
 app = Flask(__name__)
 credFile = str('/tmp/creds.json')
 
+
+API_KEY = "4d52b63c-f73a-4c27-8104-a3142512c517"
+LOGSET_ID = "c5838fd4-1d3d-4104-8293-87b72ddc5ef4"
+GET_LOGSET_URL = "https://rest.logentries.com/management/logsets/{0}"
+LOG_URL = "https://rest.logentries.com/management/logs"
+LOG_NAME_PATTERN = "exchange:{0}"
+
 @app.route('/payload', methods=['GET', 'POST'])
 def webhookServer():
-
-    # Define some vars
-    EVENT = None
-    GHE_URL = None
-    GHE_HOST = None
-    TOKEN = None
-
-    # Let's go ahead and make GET requests happy. You could use it to test firewall rules
     if request.method == 'GET':
         return jsonify({'method':'GET','status':'success'}), 200
-
     # Webhooks will make POST requests
     elif request.method == 'POST':
-
-        print ' '
-
-        # Let's get the webhook event so we know what happened
-        #print 'Getting webhook event...'
         EVENT = request.headers.get('X-GitHub-Event')
         print '----------> Received event: ' + EVENT
-        #print '  ' + EVENT
-        #print ' '
+        debugPrintWebhookJSON(request.json)
+        if EVENT == "ping":
+            return handle_ping()
+        if EVENT == "push":
+            return handle_push()
+        if EVENT == "delete":
+            return handle_delete()
 
-        # Getting the source hostname
-        #print 'Getting hostname...'
-        GHE_URL = urlparse(json.loads(request.data)['organization']['url'])
-        GHE_HOST = GHE_URL.hostname
-        #print '  ' + GHE_HOST
-        #print ' '
+def handle_ping():
+    return jsonify({'event':'ping','status':'success'}), 200
 
-        # Grab the credential for the source GitHub Enterprise server
-        #print 'Getting credential...'
-        if os.path.isfile(credFile):
-            creds = json.load(open(credFile))
-            for server in creds["servers"]:
-                if server["url"] == GHE_HOST:
-                    TOKEN = server["token"]
-                    break
+def handle_push():
+    new_log_created = False
+    name = branch_name()
+    if get_log(name) is None:
+        # create Log
+        create_log(LOG_NAME_PATTERN.format(name))
+        new_log_created = True
+    return jsonify({'event':'push','status':'success', 'log_created' : new_log_created}), 200
 
-            # No token was found
-            if TOKEN == None:
-                print 'No token found in ' + credFile + ', so we are unable execute actions against GitHub Enterprise.'
+def handle_delete():
+    deleted = False
+    name = branch_name()
+    if not (get_log(name) is None):
+        # create Log
+        delete_log(LOG_NAME_PATTERN.format(name))
+        deleted = True
+    return jsonify({'event':'push','status':'success', 'log_deleted' : deleted}), 200
 
-            # A valid GitHub Enterprise token was found
-            else:
-                #print 'Token is ' + TOKEN
+def get_log(branch_name):
+    headers = {
+        'x-api-key': API_KEY,
+        "Content-Type": "application/json"
+    }
+    url = GET_LOGSET_URL.format(LOGSET_ID)
+    resp = requests.get(url, headers=headers).json()
+    for log in resp['logset']['logs_info']:
+        if branch_name in log['name']:
+                print "Found log for branch {0}: {1}".format(branch_name, log)
+                return log
+    print "No log found for branch {0}".format(branch_name)
+    return None
 
-                # Perform actions based on the event that occurred. Events are defined at:
-                # https://developer.github.com/v3/activity/events/types/
-                if EVENT == "ping":
-                    debugPrintWebhookJSON(request.json)
-                    return jsonify({'event':'ping','status':'success'}), 200
+def create_log(name):
+    headers = {
+        'x-api-key': API_KEY,
+        "Content-Type": "application/json"
+    }
+    body = json.dumps({"log":{"name": name,"source_type":"token", "logsets_info":[{"id": LOGSET_ID}]}}, separators=(',', ':'))
+    print "Sending to Logentries: {0}".format(body)
+    r = requests.post(LOG_URL, data=body, headers=headers)
+    print "Create log result:", r.status_code, r.content
 
-                elif EVENT == "repository":
-                    event_action = request.json["action"]
-                    print 'Event Action: ' + event_action
+def delete_log(log_id):
+    headers = {
+        'x-api-key': API_KEY,
+        "Content-Type": "application/json"
+    }
+    r = requests.delete(LOG_URL + "/" + log_id, headers=headers)
+    print "Delete log result:", r.status_code, r.content
 
-                    # Perform this API call when a repository is created
-                    if event_action == "created":
-                        debugPrintWebhookJSON(request.json)
-                        orgRepo = request.json["repository"]["full_name"]
-                        api_url = 'https://HOSTNAME/api/v3/teams/ID/repos/' + orgRepo
-                        headers = {'Accept':'application/vnd.github.v3+json','Authorization':'token ' + TOKEN}
-                        params = {'permission':'admin'}
-                        r = requests.put(api_url, data=None, headers=headers, params=params, verify=False)  # Let's add a team to the repo. Only set verify=False on a test instance
-                        print r
-                        return jsonify({'event':'repository','status':'success'}), 200
-
-                elif EVENT == "create":
-                    print 'Event Action: ' + request.json["action"]
-                    debugPrintWebhookJSON(request.json)
-                    return jsonify({'event':'create','status':'success'}), 200
-
-                elif EVENT == "organization":
-                    print 'Event Action: ' + request.json["action"]
-                    return jsonify({'event':'organization','status':'success'}), 200
-
-                elif EVENT == "label":
-                    print 'Event Action: ' + request.json["action"]
-                    return jsonify({'event':'label','status':'success'}), 200
-
-                elif EVENT == "push":
-                    print 'Event Action: ' + request.json["action"]
-                    return jsonify({'event':'push','status':'success'}), 200
-
-                else:
-                    return jsonify({'event':'other','status':'success'}), 200
-
-        else:
-            print 'Error: The file ' + credFile + ' does not exist.'
-            abort(400)
-
-    else:
-        abort(400)
+def branch_name():
+    ref = request.json['ref'].replace("/refs/heads/", "")
+    print "Fetched branch name: " + ref
+    return ref
 
 def debugPrintWebhookJSON(data):
-
-    # Debug output
     print ' '
     print '======= DEBUG: BEGIN REQUEST JSON ======='
     print(json.dumps(data))
@@ -112,4 +94,4 @@ def debugPrintWebhookJSON(data):
     print ' '
 
 if __name__ == '__main__':
-    app.run(host= '127.0.0.1', port=4040)  # Run on the machine's IP address and not just localhost
+    app.run(host= '127.0.0.1', port=4041)  # Run on the machine's IP address and not just localhost
