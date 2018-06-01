@@ -56,7 +56,7 @@ def get_log(branch_name):
     url = GET_LOGSET_URL.format(LOGSET_ID)
     resp = requests.get(url, headers=headers).json()
     for log in resp['logset']['logs_info']:
-        if branch_name in log['name']:
+        if LOG_NAME_PATTERN.format(branch_name) == log['name']:
                 print "Found log for branch {0}: {1}".format(branch_name, log)
                 return log
     print "No log found for branch {0}".format(branch_name)
