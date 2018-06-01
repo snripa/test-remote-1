@@ -20,7 +20,6 @@ def webhookServer():
     elif request.method == 'POST':
         EVENT = request.headers.get('X-GitHub-Event')
         print '----------> Received event: ' + EVENT
-        debugPrintWebhookJSON(request.json)
         if EVENT == "ping":
             return handle_ping()
         if EVENT == "push":
@@ -82,16 +81,9 @@ def delete_log(log_id):
     print "Delete log result:", r.status_code, r.content
 
 def branch_name():
-    ref = request.json['ref'].replace("/refs/heads/", "")
+    ref = request.json['ref'].replace("refs/heads/", "")
     print "Fetched branch name: " + ref
     return ref
-
-def debugPrintWebhookJSON(data):
-    print ' '
-    print '======= DEBUG: BEGIN REQUEST JSON ======='
-    print(json.dumps(data))
-    print '======= DEBUG: END REQUEST JSON ======='
-    print ' '
 
 if __name__ == '__main__':
     app.run(host= '127.0.0.1', port=4041)  # Run on the machine's IP address and not just localhost
