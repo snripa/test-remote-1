@@ -37,18 +37,15 @@ def handle_push():
     name = branch_name()
     if get_log(name) is None:
         # create Log
-        create_log(LOG_NAME_PATTERN.format(name))
-        new_log_created = True
+        new_log_created = not (create_log(LOG_NAME_PATTERN.format(name)) is None)
     return jsonify({'event': 'push', 'status': 'success', 'log_created': new_log_created}), 200
 
 
 def handle_delete():
     deleted = False
-    name = branch_name()
-    if not (get_log(name) is None):
-        # create Log
-        delete_log(LOG_NAME_PATTERN.format(name))
-        deleted = True
+    log = get_log(branch_name())
+    if not (log is None):
+        deleted = delete_log(log["id"])
     return jsonify({'event': 'push', 'status': 'success', 'log_deleted': deleted}), 200
 
 
@@ -77,16 +74,18 @@ def create_log(name):
     print "Sending to Logentries: {0}".format(body)
     r = requests.post(LOG_URL, data=body, headers=headers)
     print "Create log result:", r.status_code, r.content
-    print "Created log token:{0}".format(r.json()['log']['tokens'][0])
+    token = r.json()['log']['tokens'][0]
+    print "Created log token:{0}".format(token)
+    return token
 
 
 def delete_log(log_id):
-    headers = {
-        'x-api-key': API_KEY,
-        "Content-Type": "application/json"
-    }
-    r = requests.delete(LOG_URL + "/" + log_id, headers=headers)
+    headers = {'x-api-key': API_KEY}
+    url = LOG_URL + "/" + log_id
+    print "Sending DELETE to {0}".format(url)
+    r = requests.delete(url, headers=headers)
     print "Delete log result:", r.status_code, r.content
+    return r.status_code == 204
 
 
 def branch_name():
