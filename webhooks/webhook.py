@@ -77,6 +77,7 @@ def create_log(name):
     print "Sending to Logentries: {0}".format(body)
     r = requests.post(LOG_URL, data=body, headers=headers)
     print "Create log result:", r.status_code, r.content
+    print "Created log token:{0}".format(r.content["tokens"][0])
 
 
 def delete_log(log_id):
