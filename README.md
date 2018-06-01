@@ -1,2 +1,1 @@
-# test-remote-1
-remote 1
+# Simple GitHub webhook
