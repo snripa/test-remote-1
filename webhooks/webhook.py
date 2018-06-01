@@ -31,7 +31,7 @@ def webhookServer():
             return handle_ping()
 
         if EVENT == "push":
-            handle_push
+            return handle_push()
 
         if EVENT == "delete":
             return handle_delete()
